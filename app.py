@@ -1,12 +1,13 @@
 import eventlet
 eventlet.monkey_patch()
 
-from flask import Flask, render_template
+from flask import Flask, render_template, Response
 from flask_socketio import SocketIO
 import cv2
 import mediapipe as mp
 import threading
 import json
+import base64
 
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*")
@@ -19,52 +20,35 @@ if not cap.isOpened():
     exit()
 
 def is_pointing(hand_landmarks):
-    """Detects if the index finger is pointing (drawing mode)."""
+    """Detect if the index finger is pointing (draw mode)."""
     landmarks = hand_landmarks.landmark
     index_tip = landmarks[mp_hands.HandLandmark.INDEX_FINGER_TIP]
     index_mcp = landmarks[mp_hands.HandLandmark.INDEX_FINGER_MCP]
 
-    other_finger_tips = [
-        landmarks[mp_hands.HandLandmark.MIDDLE_FINGER_TIP],
-        landmarks[mp_hands.HandLandmark.RING_FINGER_TIP],
-        landmarks[mp_hands.HandLandmark.PINKY_TIP]
-    ]
-    other_finger_mcps = [
-        landmarks[mp_hands.HandLandmark.MIDDLE_FINGER_MCP],
-        landmarks[mp_hands.HandLandmark.RING_FINGER_MCP],
-        landmarks[mp_hands.HandLandmark.PINKY_MCP]
-    ]
+    others_curled = all(
+        landmarks[finger_tip].y > landmarks[finger_mcp].y + 0.02
+        for finger_tip, finger_mcp in [
+            (mp_hands.HandLandmark.MIDDLE_FINGER_TIP, mp_hands.HandLandmark.MIDDLE_FINGER_MCP),
+            (mp_hands.HandLandmark.RING_FINGER_TIP, mp_hands.HandLandmark.RING_FINGER_MCP),
+            (mp_hands.HandLandmark.PINKY_TIP, mp_hands.HandLandmark.PINKY_MCP)
+        ]
+    )
 
-    index_extended = index_tip.y < index_mcp.y - 0.05
-    others_fully_curled = all(tip.y > mcp.y + 0.02 for tip, mcp in zip(other_finger_tips, other_finger_mcps))
-    index_above_others = all(index_tip.y < tip.y - 0.02 for tip in other_finger_tips)
-
-    return index_extended and others_fully_curled and index_above_others
-
+    return index_tip.y < index_mcp.y - 0.05 and others_curled
 
 def is_palm_open(hand_landmarks):
-    """Detects if the palm is open (erase mode)."""
+    """Detect if the palm is open (erase mode)."""
     landmarks = hand_landmarks.landmark
-    fingers = [
-        (mp_hands.HandLandmark.INDEX_FINGER_TIP, mp_hands.HandLandmark.INDEX_FINGER_MCP),
-        (mp_hands.HandLandmark.MIDDLE_FINGER_TIP, mp_hands.HandLandmark.MIDDLE_FINGER_MCP),
-        (mp_hands.HandLandmark.RING_FINGER_TIP, mp_hands.HandLandmark.RING_FINGER_MCP),
-        (mp_hands.HandLandmark.PINKY_TIP, mp_hands.HandLandmark.PINKY_MCP)
-    ]
-    open_fingers = sum(1 for tip, mcp in fingers if landmarks[tip].y < landmarks[mcp].y)
-    return open_fingers >= 4
-
-def is_fist(hand_landmarks):
-    """Detects if the hand is in a fist (rest mode)."""
-    landmarks = hand_landmarks.landmark
-    fingers = [
-        (mp_hands.HandLandmark.INDEX_FINGER_TIP, mp_hands.HandLandmark.INDEX_FINGER_MCP),
-        (mp_hands.HandLandmark.MIDDLE_FINGER_TIP, mp_hands.HandLandmark.MIDDLE_FINGER_MCP),
-        (mp_hands.HandLandmark.RING_FINGER_TIP, mp_hands.HandLandmark.RING_FINGER_MCP),
-        (mp_hands.HandLandmark.PINKY_TIP, mp_hands.HandLandmark.PINKY_MCP)
-    ]
-    curled_fingers = sum(1 for tip, mcp in fingers if landmarks[tip].y > landmarks[mcp].y)
-    return curled_fingers >= 4
+    fingers_extended = sum(
+        landmarks[finger_tip].y < landmarks[finger_mcp].y
+        for finger_tip, finger_mcp in [
+            (mp_hands.HandLandmark.INDEX_FINGER_TIP, mp_hands.HandLandmark.INDEX_FINGER_MCP),
+            (mp_hands.HandLandmark.MIDDLE_FINGER_TIP, mp_hands.HandLandmark.MIDDLE_FINGER_MCP),
+            (mp_hands.HandLandmark.RING_FINGER_TIP, mp_hands.HandLandmark.RING_FINGER_MCP),
+            (mp_hands.HandLandmark.PINKY_TIP, mp_hands.HandLandmark.PINKY_MCP)
+        ]
+    )
+    return fingers_extended >= 4
 
 def track_hands():
     """Captures hand movement and sends to frontend via WebSockets."""
@@ -97,14 +81,19 @@ def track_hands():
             normalized_y = index_y / h if index_y else None
 
             socketio.emit("hand_data", json.dumps({"x": normalized_x, "y": normalized_y, "gesture": gesture}))
-            eventlet.sleep(0.05)  # Prevents CPU overuse
+
+            # Send camera feed as base64
+            _, buffer = cv2.imencode(".jpg", frame)
+            frame_base64 = base64.b64encode(buffer).decode("utf-8")
+            socketio.emit("video_feed", frame_base64)
+
+            eventlet.sleep(0.02)  # Lower delay for smoother tracking
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
 if __name__ == '__main__':
-    # Start tracking in a background thread only when running directly
     tracking_thread = threading.Thread(target=track_hands)
     tracking_thread.daemon = True
     tracking_thread.start()

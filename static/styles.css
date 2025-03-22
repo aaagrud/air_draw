@@ -1,0 +1,12 @@
+body { text-align: center; font-family: Arial, sans-serif; }
+        canvas { border: 2px solid black; background: rgb(255, 255, 255); display: block; margin: auto; position: relative; }
+        #clearButton { margin-top: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        #videoFeed { width: 300px; border: 2px solid black; margin-top: 10px; }
+        #pointer {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: rgb(219, 168, 199);
+            border-radius: 50%;
+            display: none;
+        }

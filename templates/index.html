@@ -4,17 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hand Gesture Drawing</title>
+    <link rel="stylesheet" href="../static/styles.css">
     <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
-    <style>
-        body { text-align: center; font-family: Arial, sans-serif; }
-        canvas { border: 2px solid black; background: rgb(77, 161, 234); display: block; margin: auto; }
-        #clearButton { margin-top: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
-    </style>
 </head>
 <body>
 
 <h1>Hand Gesture Drawing</h1>
-<canvas id="drawingCanvas" width="800" height="500"></canvas>
+<img id="videoFeed" />
+<div style="position: relative; display: inline-block;">
+    <canvas id="drawingCanvas" width="800" height="500"></canvas>
+    <div id="pointer"></div> <!-- Pointer Circle -->
+</div>
 <br>
 <button id="clearButton">Clear Canvas</button>
 
@@ -22,43 +22,69 @@
     const socket = io();
     const canvas = document.getElementById("drawingCanvas");
     const ctx = canvas.getContext("2d");
+    const videoFeed = document.getElementById("videoFeed");
+    const pointer = document.getElementById("pointer");
+
     let lastX = null, lastY = null;
     let drawing = false;
+    let points = [];
+
+    function smoothDraw() {
+        if (points.length < 3) return;
+
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+
+        for (let i = 1; i < points.length - 1; i++) {
+            const midX = (points[i].x + points[i + 1].x) / 2;
+            const midY = (points[i].y + points[i + 1].y) / 2;
+            ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+        }
+
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 5;
+        ctx.stroke();
+    }
 
     socket.on("hand_data", function(message) {
         const data = JSON.parse(message);
-        if (data.x === null || data.y === null) return;
-        
+        if (data.x === null || data.y === null) {
+            pointer.style.display = "none"; // Hide pointer if no hand detected
+            return;
+        }
+
         const x = data.x * canvas.width;
         const y = data.y * canvas.height;
         const gesture = data.gesture;
 
+        // Update pointer position
+        pointer.style.left = `${x - 5}px`;
+        pointer.style.top = `${y - 5}px`;
+        pointer.style.display = "block";
+
         if (gesture === "draw") {
             drawing = true;
-            if (lastX !== null && lastY !== null) {
-                ctx.beginPath();
-                ctx.moveTo(lastX, lastY);
-                ctx.lineTo(x, y);
-                ctx.strokeStyle = "black";
-                ctx.lineWidth = 5;
-                ctx.stroke();
-            }
-            lastX = x;
-            lastY = y;
+            points.push({ x, y });
+            smoothDraw();
         } else if (gesture === "erase") {
             drawing = false;
             ctx.clearRect(x - 20, y - 20, 40, 40);
-            lastX = null;
-            lastY = null;
+            points = [];
+            pointer.style.display = "none"; // Hide pointer when erasing
         } else {
             drawing = false;
-            lastX = null;
-            lastY = null;
+            points = [];
         }
+    });
+
+    socket.on("video_feed", function(image) {
+        videoFeed.src = "data:image/jpeg;base64," + image;
     });
 
     document.getElementById("clearButton").addEventListener("click", () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        points = [];
+        pointer.style.display = "none"; // Hide pointer when clearing
     });
 </script>
 
