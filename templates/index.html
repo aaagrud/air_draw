@@ -3,90 +3,304 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hand Gesture Drawing</title>
+    <title>Interactive Drawing App</title>
     <link rel="stylesheet" href="../static/styles.css">
     <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
 </head>
 <body>
+    <div class="container fade-in">
+        <h1>Interactive Drawing App</h1>
+        
+        <div class="controls">
+            <button id="modeToggle" class="active">Hand Gesture Mode</button>
+            <button id="clearButton" class="tooltip">
+                Clear Canvas
+                <span class="tooltiptext">Clear all drawings</span>
+            </button>
+        </div>
 
-<h1>Hand Gesture Drawing</h1>
-<img id="videoFeed" />
-<div style="position: relative; display: inline-block;">
-    <canvas id="drawingCanvas" width="800" height="500"></canvas>
-    <div id="pointer"></div> <!-- Pointer Circle -->
-</div>
-<br>
-<button id="clearButton">Clear Canvas</button>
+        <div class="canvas-container">
+            <div style="position: relative;">
+                <canvas id="drawingCanvas" width="800" height="500"></canvas>
+                <div id="pointer"></div>
+            </div>
+            <img id="videoFeed" />
+        </div>
 
-<script>
-    const socket = io();
-    const canvas = document.getElementById("drawingCanvas");
-    const ctx = canvas.getContext("2d");
-    const videoFeed = document.getElementById("videoFeed");
-    const pointer = document.getElementById("pointer");
+        <div class="toolbar">
+            <div class="color-picker-container">
+                <label for="colorPicker">Color</label>
+                <div class="color-picker">
+                    <input type="color" id="colorPicker" value="#000000">
+                </div>
+            </div>
 
-    let lastX = null, lastY = null;
-    let drawing = false;
-    let points = [];
+            <div class="brush-size-container">
+                <label for="brushSizeSlider">Brush Size: <span id="brushSizeValue">5</span>px</label>
+                <input type="range" min="1" max="50" value="5" class="brush-size-slider" id="brushSizeSlider">
+            </div>
 
-    function smoothDraw() {
-        if (points.length < 3) return;
+            <div class="action-buttons">
+                <button id="undoButton" class="undo-button tooltip">
+                    Undo
+                    <span class="tooltiptext">Undo last action (Ctrl+Z)</span>
+                </button>
+                <button id="redoButton" class="redo-button tooltip">
+                    Redo
+                    <span class="tooltiptext">Redo last action (Ctrl+Y)</span>
+                </button>
+                <button id="downloadButton" class="download-button tooltip">
+                    Download
+                    <span class="tooltiptext">Download drawing as PNG</span>
+                </button>
+            </div>
+        </div>
+    </div>
 
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
+    <script>
+        const socket = io();
+        const canvas = document.getElementById("drawingCanvas");
+        const ctx = canvas.getContext("2d");
+        const videoFeed = document.getElementById("videoFeed");
+        const pointer = document.getElementById("pointer");
+        const modeToggle = document.getElementById("modeToggle");
+        const clearButton = document.getElementById("clearButton");
+        const colorPicker = document.getElementById("colorPicker");
+        const brushSizeSlider = document.getElementById("brushSizeSlider");
+        const brushSizeValue = document.getElementById("brushSizeValue");
+        const undoButton = document.getElementById("undoButton");
+        const redoButton = document.getElementById("redoButton");
+        const downloadButton = document.getElementById("downloadButton");
 
-        for (let i = 1; i < points.length - 1; i++) {
-            const midX = (points[i].x + points[i + 1].x) / 2;
-            const midY = (points[i].y + points[i + 1].y) / 2;
-            ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
-        }
+        let lastX = null, lastY = null;
+        let drawing = false;
+        let points = [];
+        let currentMode = "hand";
+        let currentColor = "#000000";
+        let currentBrushSize = 5;
+        let isEraser = false;
+        let history = [];
+        let historyIndex = -1;
 
-        ctx.strokeStyle = "black";
-        ctx.lineWidth = 5;
-        ctx.stroke();
-    }
+        // Initialize canvas
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = currentBrushSize;
+        ctx.strokeStyle = currentColor;
 
-    socket.on("hand_data", function(message) {
-        const data = JSON.parse(message);
-        if (data.x === null || data.y === null) {
-            pointer.style.display = "none"; // Hide pointer if no hand detected
-            return;
-        }
+        // Save initial canvas state
+        saveState();
 
-        const x = data.x * canvas.width;
-        const y = data.y * canvas.height;
-        const gesture = data.gesture;
-
-        // Update pointer position
-        pointer.style.left = `${x - 5}px`;
-        pointer.style.top = `${y - 5}px`;
-        pointer.style.display = "block";
-
-        if (gesture === "draw") {
-            drawing = true;
-            points.push({ x, y });
-            smoothDraw();
-        } else if (gesture === "erase") {
-            drawing = false;
-            ctx.clearRect(x - 20, y - 20, 40, 40);
+        // Clear canvas functionality
+        clearButton.addEventListener("click", () => {
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Reset drawing state
             points = [];
-            pointer.style.display = "none"; // Hide pointer when erasing
-        } else {
+            drawing = false;
+            
+            // Create a new history entry for the cleared state
+            history = [canvas.toDataURL()];
+            historyIndex = 0;
+            
+            // Update button states
+            updateUndoRedoButtons();
+        });
+
+        // Mode toggle functionality
+        modeToggle.addEventListener("click", () => {
+            currentMode = currentMode === "hand" ? "mouse" : "hand";
+            modeToggle.textContent = currentMode === "hand" ? "Hand Gesture Mode" : "Mouse Mode";
+            modeToggle.classList.toggle("active");
+            pointer.style.display = currentMode === "hand" ? "none" : "block";
+        });
+
+        // Color picker functionality
+        colorPicker.addEventListener("input", (e) => {
+            currentColor = e.target.value;
+            isEraser = false;
+        });
+
+        // Brush size slider functionality
+        brushSizeSlider.addEventListener("input", (e) => {
+            currentBrushSize = parseInt(e.target.value);
+            brushSizeValue.textContent = currentBrushSize;
+            ctx.lineWidth = currentBrushSize;
+        });
+
+        // Mouse drawing functionality
+        canvas.addEventListener("mousedown", (e) => {
+            if (currentMode === "mouse") {
+                drawing = true;
+                const rect = canvas.getBoundingClientRect();
+                lastX = e.clientX - rect.left;
+                lastY = e.clientY - rect.top;
+                points = [{ x: lastX, y: lastY }];
+            }
+        });
+
+        canvas.addEventListener("mousemove", (e) => {
+            if (currentMode === "mouse" && drawing) {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                points.push({ x, y });
+                if (points.length >= 3) {
+                    smoothDraw();
+                }
+
+                lastX = x;
+                lastY = y;
+            }
+        });
+
+        canvas.addEventListener("mouseup", () => {
+            if (drawing) {
+                saveState();
+            }
             drawing = false;
             points = [];
+        });
+
+        canvas.addEventListener("mouseout", () => {
+            if (drawing) {
+                saveState();
+            }
+            drawing = false;
+            points = [];
+        });
+
+        // Undo/Redo functionality
+        function saveState() {
+            // Remove any states after current index
+            history = history.slice(0, historyIndex + 1);
+            // Add new state
+            history.push(canvas.toDataURL());
+            historyIndex++;
+            updateUndoRedoButtons();
         }
-    });
 
-    socket.on("video_feed", function(image) {
-        videoFeed.src = "data:image/jpeg;base64," + image;
-    });
+        function updateUndoRedoButtons() {
+            undoButton.disabled = historyIndex <= 0;
+            redoButton.disabled = historyIndex >= history.length - 1;
+        }
 
-    document.getElementById("clearButton").addEventListener("click", () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        points = [];
-        pointer.style.display = "none"; // Hide pointer when clearing
-    });
-</script>
+        function restoreState() {
+            const img = new Image();
+            img.onload = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0);
+            };
+            img.src = history[historyIndex];
+        }
 
+        undoButton.addEventListener("click", () => {
+            if (historyIndex > 0) {
+                historyIndex--;
+                restoreState();
+                updateUndoRedoButtons();
+            }
+        });
+
+        redoButton.addEventListener("click", () => {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                restoreState();
+                updateUndoRedoButtons();
+            }
+        });
+
+        // Keyboard shortcuts for undo/redo
+        document.addEventListener("keydown", (e) => {
+            if (e.ctrlKey) {
+                if (e.key === "z" && !e.shiftKey) {
+                    e.preventDefault();
+                    undoButton.click();
+                } else if (e.key === "y" || (e.key === "z" && e.shiftKey)) {
+                    e.preventDefault();
+                    redoButton.click();
+                }
+            }
+        });
+
+        // Download functionality
+        downloadButton.addEventListener("click", () => {
+            const link = document.createElement("a");
+            link.download = "drawing.png";
+            link.href = canvas.toDataURL("image/png");
+            link.click();
+        });
+
+        // Hand gesture drawing functionality
+        socket.on("hand_data", function(message) {
+            if (currentMode !== "hand") return;
+
+            const data = JSON.parse(message);
+            if (data.x === null || data.y === null) {
+                pointer.style.display = "none";
+                if (drawing) {
+                    saveState();
+                }
+                drawing = false;
+                points = [];
+                return;
+            }
+
+            const x = data.x * canvas.width;
+            const y = data.y * canvas.height;
+            const gesture = data.gesture;
+
+            pointer.style.left = `${x - 7.5}px`;
+            pointer.style.top = `${y - 7.5}px`;
+            pointer.style.display = "block";
+
+            if (gesture === "draw") {
+                if (!drawing) {
+                    points = [];
+                }
+                drawing = true;
+                points.push({ x, y });
+                if (points.length >= 3) {
+                    smoothDraw();
+                }
+            } else if (gesture === "erase") {
+                if (drawing) {
+                    saveState();
+                }
+                drawing = false;
+                ctx.clearRect(x - 20, y - 20, 40, 40);
+                points = [];
+            } else {
+                if (drawing) {
+                    saveState();
+                }
+                drawing = false;
+                points = [];
+            }
+        });
+
+        function smoothDraw() {
+            if (points.length < 3) return;
+
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+
+            for (let i = 1; i < points.length - 1; i++) {
+                const midX = (points[i].x + points[i + 1].x) / 2;
+                const midY = (points[i].y + points[i + 1].y) / 2;
+                ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+            }
+
+            ctx.strokeStyle = isEraser ? "#ffffff" : currentColor;
+            ctx.lineWidth = currentBrushSize;
+            ctx.stroke();
+        }
+
+        socket.on("video_feed", function(image) {
+            videoFeed.src = "data:image/jpeg;base64," + image;
+        });
+    </script>
 </body>
 </html>
