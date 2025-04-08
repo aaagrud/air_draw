@@ -6,16 +6,32 @@
     <title>Interactive Drawing App</title>
     <link rel="stylesheet" href="../static/styles.css">
     <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container fade-in">
         <h1>Interactive Drawing App</h1>
         
         <div class="controls">
-            <button id="modeToggle" class="active">Hand Gesture Mode</button>
+            <button id="modeToggle" class="active">
+                <span class="icon">✋</span>
+                Hand Gesture Mode
+            </button>
             <button id="clearButton" class="tooltip">
+                <span class="icon">🗑️</span>
                 Clear Canvas
                 <span class="tooltiptext">Clear all drawings</span>
+            </button>
+            <button id="recognizeText" class="tooltip">
+                <span class="icon">🔍</span>
+                Recognize Text
+                <span class="tooltiptext">Convert drawing to text</span>
+            </button>
+            <button id="saveDrawing" class="tooltip">
+                <span class="icon">💾</span>
+                Save Drawing
+                <span class="tooltiptext">Save current drawing</span>
             </button>
         </div>
 
@@ -24,35 +40,88 @@
                 <canvas id="drawingCanvas" width="800" height="500"></canvas>
                 <div id="pointer"></div>
             </div>
-            <img id="videoFeed" />
+            <div class="video-container">
+                <img id="videoFeed" />
+                <div class="gesture-info">
+                    <h3>Gesture Guide</h3>
+                    <ul>
+                        <li>✌️ Pointing: Draw</li>
+                        <li>🖐️ Open Palm: Erase</li>
+                        <li>✊ Fist: Stop Drawing</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-recognition-container">
+            <h3>Recognized Text</h3>
+            <div id="recognizedText" class="recognized-text" contenteditable="true"></div>
+            <div class="text-actions">
+                <button id="copyText" class="tooltip">
+                    <span class="icon">📋</span>
+                    Copy Text
+                    <span class="tooltiptext">Copy recognized text</span>
+                </button>
+                <button id="clearText" class="tooltip">
+                    <span class="icon">🗑️</span>
+                    Clear Text
+                    <span class="tooltiptext">Clear recognized text</span>
+                </button>
+            </div>
         </div>
 
         <div class="toolbar">
-            <div class="color-picker-container">
-                <label for="colorPicker">Color</label>
-                <div class="color-picker">
-                    <input type="color" id="colorPicker" value="#000000">
+            <div class="toolbar-row">
+                <div class="color-picker-container">
+                    <label for="colorPicker">Color</label>
+                    <div class="color-picker" id="colorPickerCircle">
+                        <input type="color" id="colorPicker" value="#000000">
+                    </div>
                 </div>
             </div>
 
-            <div class="brush-size-container">
-                <label for="brushSizeSlider">Brush Size: <span id="brushSizeValue">5</span>px</label>
-                <input type="range" min="1" max="50" value="5" class="brush-size-slider" id="brushSizeSlider">
+            <div class="toolbar-row">
+                <div class="drawing-tools">
+                    <button id="pencilTool" class="tool-button pencil active tooltip">
+                        <span class="icon">✏️</span>
+                        <span class="tooltiptext">Pencil</span>
+                    </button>
+                    <button id="brushTool" class="tool-button brush tooltip">
+                        <span class="icon">🖌️</span>
+                        <span class="tooltiptext">Brush</span>
+                    </button>
+                    <button id="eraserTool" class="tool-button eraser tooltip">
+                        <span class="icon">🧹</span>
+                        <span class="tooltiptext">Eraser</span>
+                    </button>
+                </div>
             </div>
 
-            <div class="action-buttons">
-                <button id="undoButton" class="undo-button tooltip">
-                    Undo
-                    <span class="tooltiptext">Undo last action (Ctrl+Z)</span>
-                </button>
-                <button id="redoButton" class="redo-button tooltip">
-                    Redo
-                    <span class="tooltiptext">Redo last action (Ctrl+Y)</span>
-                </button>
-                <button id="downloadButton" class="download-button tooltip">
-                    Download
-                    <span class="tooltiptext">Download drawing as PNG</span>
-                </button>
+            <div class="toolbar-row">
+                <div class="brush-size-container">
+                    <label for="brushSizeSlider">Brush Size: <span id="brushSizeValue">5</span>px</label>
+                    <input type="range" min="1" max="50" value="5" class="brush-size-slider" id="brushSizeSlider">
+                </div>
+            </div>
+
+            <div class="toolbar-row">
+                <div class="action-buttons">
+                    <button id="undoButton" class="undo-button tooltip">
+                        <span class="icon">↩️</span>
+                        Undo
+                        <span class="tooltiptext">Undo last action (Ctrl+Z)</span>
+                    </button>
+                    <button id="redoButton" class="redo-button tooltip">
+                        <span class="icon">↪️</span>
+                        Redo
+                        <span class="tooltiptext">Redo last action (Ctrl+Y)</span>
+                    </button>
+                    <button id="downloadButton" class="download-button tooltip">
+                        <span class="icon">⬇️</span>
+                        Download
+                        <span class="tooltiptext">Download drawing as PNG</span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -71,6 +140,15 @@
         const undoButton = document.getElementById("undoButton");
         const redoButton = document.getElementById("redoButton");
         const downloadButton = document.getElementById("downloadButton");
+        const recognizeTextButton = document.getElementById("recognizeText");
+        const recognizedTextElement = document.getElementById("recognizedText");
+        const saveDrawingButton = document.getElementById("saveDrawing");
+        const copyTextButton = document.getElementById("copyText");
+        const clearTextButton = document.getElementById("clearText");
+        const pencilTool = document.getElementById("pencilTool");
+        const brushTool = document.getElementById("brushTool");
+        const eraserTool = document.getElementById("eraserTool");
+        const colorPickerCircle = document.getElementById("colorPickerCircle");
 
         let lastX = null, lastY = null;
         let drawing = false;
@@ -81,6 +159,13 @@
         let isEraser = false;
         let history = [];
         let historyIndex = -1;
+        let isRecognizing = false;
+        let currentTool = "pencil";
+
+        // Add smudging effect variables
+        let lastPoints = [];
+        const maxLastPoints = 5;
+        let smudgeIntensity = 0.3;
 
         // Initialize canvas
         ctx.lineCap = "round";
@@ -90,6 +175,46 @@
 
         // Save initial canvas state
         saveState();
+
+        // Text recognition functionality
+        recognizeTextButton.addEventListener("click", async () => {
+            if (isRecognizing) return;
+            
+            isRecognizing = true;
+            recognizeTextButton.disabled = true;
+            recognizeTextButton.textContent = "Recognizing...";
+            
+            try {
+                // Create a temporary canvas with white background
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                // Fill with white background
+                tempCtx.fillStyle = 'white';
+                tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+                
+                // Draw the current canvas content
+                tempCtx.drawImage(canvas, 0, 0);
+                
+                // Convert to image data
+                const imageData = tempCanvas.toDataURL('image/png');
+                
+                // Perform OCR
+                const { data: { text } } = await Tesseract.recognize(imageData);
+                
+                // Display recognized text
+                recognizedTextElement.textContent = text.trim();
+            } catch (error) {
+                console.error('OCR Error:', error);
+                recognizedTextElement.textContent = "Error recognizing text. Please try again.";
+            } finally {
+                isRecognizing = false;
+                recognizeTextButton.disabled = false;
+                recognizeTextButton.textContent = "Recognize Text";
+            }
+        });
 
         // Clear canvas functionality
         clearButton.addEventListener("click", () => {
@@ -106,6 +231,9 @@
             
             // Update button states
             updateUndoRedoButtons();
+            
+            // Clear recognized text
+            recognizedTextElement.textContent = "";
         });
 
         // Mode toggle functionality
@@ -119,7 +247,13 @@
         // Color picker functionality
         colorPicker.addEventListener("input", (e) => {
             currentColor = e.target.value;
+            colorPickerCircle.style.setProperty("--current-color", currentColor);
             isEraser = false;
+            if (currentTool === "eraser") {
+                eraserTool.classList.remove("active");
+                pencilTool.classList.add("active");
+                currentTool = "pencil";
+            }
         });
 
         // Brush size slider functionality
@@ -159,6 +293,7 @@
         canvas.addEventListener("mouseup", () => {
             if (drawing) {
                 saveState();
+                lastPoints = [];
             }
             drawing = false;
             points = [];
@@ -167,6 +302,7 @@
         canvas.addEventListener("mouseout", () => {
             if (drawing) {
                 saveState();
+                lastPoints = [];
             }
             drawing = false;
             points = [];
@@ -215,12 +351,18 @@
         // Keyboard shortcuts for undo/redo
         document.addEventListener("keydown", (e) => {
             if (e.ctrlKey) {
-                if (e.key === "z" && !e.shiftKey) {
-                    e.preventDefault();
-                    undoButton.click();
-                } else if (e.key === "y" || (e.key === "z" && e.shiftKey)) {
-                    e.preventDefault();
-                    redoButton.click();
+                switch(e.key) {
+                    case "z":
+                        if (!e.shiftKey) undoButton.click();
+                        break;
+                    case "y":
+                    case "Z":
+                        redoButton.click();
+                        break;
+                    case "s":
+                        e.preventDefault();
+                        saveDrawingButton.click();
+                        break;
                 }
             }
         });
@@ -287,10 +429,48 @@
             ctx.beginPath();
             ctx.moveTo(points[0].x, points[0].y);
 
-            for (let i = 1; i < points.length - 1; i++) {
-                const midX = (points[i].x + points[i + 1].x) / 2;
-                const midY = (points[i].y + points[i + 1].y) / 2;
-                ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+            if (currentTool === "pencil") {
+                for (let i = 1; i < points.length - 1; i++) {
+                    const midX = (points[i].x + points[i + 1].x) / 2;
+                    const midY = (points[i].y + points[i + 1].y) / 2;
+                    ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+                }
+            } else if (currentTool === "brush") {
+                // Store the last few points for smudging
+                lastPoints.push({x: points[points.length - 1].x, y: points[points.length - 1].y});
+                if (lastPoints.length > maxLastPoints) {
+                    lastPoints.shift();
+                }
+
+                // Draw the main stroke
+                for (let i = 1; i < points.length - 1; i++) {
+                    const midX = (points[i].x + points[i + 1].x) / 2;
+                    const midY = (points[i].y + points[i + 1].y) / 2;
+                    ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+                }
+
+                // Add smudging effect
+                if (lastPoints.length > 1) {
+                    ctx.globalAlpha = smudgeIntensity;
+                    for (let i = 0; i < lastPoints.length - 1; i++) {
+                        const start = lastPoints[i];
+                        const end = lastPoints[i + 1];
+                        
+                        // Create a gradient for the smudge
+                        const gradient = ctx.createLinearGradient(start.x, start.y, end.x, end.y);
+                        gradient.addColorStop(0, currentColor);
+                        gradient.addColorStop(1, currentColor);
+                        
+                        ctx.strokeStyle = gradient;
+                        ctx.lineWidth = currentBrushSize * (1 + i * 0.2);
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(start.x, start.y);
+                        ctx.lineTo(end.x, end.y);
+                        ctx.stroke();
+                    }
+                    ctx.globalAlpha = 1;
+                }
             }
 
             ctx.strokeStyle = isEraser ? "#ffffff" : currentColor;
@@ -300,6 +480,70 @@
 
         socket.on("video_feed", function(image) {
             videoFeed.src = "data:image/jpeg;base64," + image;
+        });
+
+        // Save drawing functionality
+        saveDrawingButton.addEventListener("click", () => {
+            const drawingData = canvas.toDataURL("image/png");
+            localStorage.setItem("savedDrawing", drawingData);
+            alert("Drawing saved successfully!");
+        });
+
+        // Load saved drawing on page load
+        window.addEventListener("load", () => {
+            const savedDrawing = localStorage.getItem("savedDrawing");
+            if (savedDrawing) {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    saveState();
+                };
+                img.src = savedDrawing;
+            }
+        });
+
+        // Copy text functionality
+        copyTextButton.addEventListener("click", () => {
+            const text = recognizedTextElement.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert("Text copied to clipboard!");
+            }).catch(err => {
+                console.error("Failed to copy text: ", err);
+            });
+        });
+
+        // Clear text functionality
+        clearTextButton.addEventListener("click", () => {
+            recognizedTextElement.textContent = "";
+        });
+
+        // Drawing tools functionality
+        pencilTool.addEventListener("click", () => {
+            currentTool = "pencil";
+            isEraser = false;
+            pencilTool.classList.add("active");
+            brushTool.classList.remove("active");
+            eraserTool.classList.remove("active");
+            ctx.strokeStyle = currentColor;
+        });
+
+        brushTool.addEventListener("click", () => {
+            currentTool = "brush";
+            isEraser = false;
+            brushTool.classList.add("active");
+            pencilTool.classList.remove("active");
+            eraserTool.classList.remove("active");
+            ctx.strokeStyle = currentColor;
+        });
+
+        eraserTool.addEventListener("click", () => {
+            currentTool = "eraser";
+            isEraser = true;
+            eraserTool.classList.add("active");
+            pencilTool.classList.remove("active");
+            brushTool.classList.remove("active");
+            ctx.strokeStyle = "#ffffff";
         });
     </script>
 </body>
