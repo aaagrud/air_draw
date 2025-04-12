@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="../static/styles.css">
     <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
     <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/simplify-js@1.2.4/simplify.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -41,11 +42,11 @@
                 <div id="pointer"></div>
             </div>
             <div class="video-container">
-                <img id="videoFeed" />
+<img id="videoFeed" />
                 <div class="gesture-info">
                     <h3>Gesture Guide</h3>
                     <ul>
-                        <li>✌️ Pointing: Draw</li>
+                        <li>☝️ Pointing: Draw</li>
                         <li>🖐️ Open Palm: Erase</li>
                         <li>✊ Fist: Stop Drawing</li>
                     </ul>
@@ -98,6 +99,17 @@
             </div>
 
             <div class="toolbar-row">
+                <div class="shape-detection-container">
+                    <label class="switch tooltip">
+                        <input type="checkbox" id="shapeDetectionToggle">
+                        <span class="slider round"></span>
+                        <span class="tooltiptext">Auto Shape Detection</span>
+                    </label>
+                    <span class="switch-label">Auto Shape Detection</span>
+                </div>
+            </div>
+
+            <div class="toolbar-row">
                 <div class="brush-size-container">
                     <label for="brushSizeSlider">Brush Size: <span id="brushSizeValue">5</span>px</label>
                     <input type="range" min="1" max="50" value="5" class="brush-size-slider" id="brushSizeSlider">
@@ -124,14 +136,14 @@
                 </div>
             </div>
         </div>
-    </div>
+</div>
 
-    <script>
-        const socket = io();
-        const canvas = document.getElementById("drawingCanvas");
-        const ctx = canvas.getContext("2d");
-        const videoFeed = document.getElementById("videoFeed");
-        const pointer = document.getElementById("pointer");
+<script>
+    const socket = io();
+    const canvas = document.getElementById("drawingCanvas");
+    const ctx = canvas.getContext("2d");
+    const videoFeed = document.getElementById("videoFeed");
+    const pointer = document.getElementById("pointer");
         const modeToggle = document.getElementById("modeToggle");
         const clearButton = document.getElementById("clearButton");
         const colorPicker = document.getElementById("colorPicker");
@@ -149,10 +161,12 @@
         const brushTool = document.getElementById("brushTool");
         const eraserTool = document.getElementById("eraserTool");
         const colorPickerCircle = document.getElementById("colorPickerCircle");
+        const shapeDetectionToggle = document.getElementById("shapeDetectionToggle");
+        let lastSavedState = null;
 
-        let lastX = null, lastY = null;
-        let drawing = false;
-        let points = [];
+    let lastX = null, lastY = null;
+    let drawing = false;
+    let points = [];
         let currentMode = "hand";
         let currentColor = "#000000";
         let currentBrushSize = 5;
@@ -161,6 +175,8 @@
         let historyIndex = -1;
         let isRecognizing = false;
         let currentTool = "pencil";
+        let isShapeDetectionEnabled = false;
+        let shapePoints = [];
 
         // Add smudging effect variables
         let lastPoints = [];
@@ -263,14 +279,23 @@
             ctx.lineWidth = currentBrushSize;
         });
 
+        // Shape detection toggle functionality
+        shapeDetectionToggle.addEventListener("change", () => {
+            isShapeDetectionEnabled = shapeDetectionToggle.checked;
+        });
+
         // Mouse drawing functionality
         canvas.addEventListener("mousedown", (e) => {
             if (currentMode === "mouse") {
+                lastSavedState = canvas.toDataURL();
                 drawing = true;
                 const rect = canvas.getBoundingClientRect();
                 lastX = e.clientX - rect.left;
                 lastY = e.clientY - rect.top;
                 points = [{ x: lastX, y: lastY }];
+                if (isShapeDetectionEnabled) {
+                    shapePoints = [{ x: lastX, y: lastY }];
+                }
             }
         });
 
@@ -281,6 +306,9 @@
                 const y = e.clientY - rect.top;
 
                 points.push({ x, y });
+                if (isShapeDetectionEnabled) {
+                    shapePoints.push({ x, y });
+                }
                 if (points.length >= 3) {
                     smoothDraw();
                 }
@@ -292,11 +320,16 @@
 
         canvas.addEventListener("mouseup", () => {
             if (drawing) {
-                saveState();
+                if (isShapeDetectionEnabled && shapePoints.length > 10) {
+                    detectAndDrawShape();
+                } else {
+                    saveState();
+                }
                 lastPoints = [];
             }
             drawing = false;
             points = [];
+            shapePoints = [];
         });
 
         canvas.addEventListener("mouseout", () => {
@@ -324,12 +357,18 @@
         }
 
         function restoreState() {
-            const img = new Image();
-            img.onload = () => {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0);
-            };
-            img.src = history[historyIndex];
+            if (historyIndex >= 0 && historyIndex < history.length) {
+                const img = new Image();
+                img.onload = () => {
+                    // Clear only the area that needs to be updated
+                    const lastState = history[historyIndex];
+                    if (lastState) {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0);
+                    }
+                };
+                img.src = history[historyIndex];
+            }
         }
 
         undoButton.addEventListener("click", () => {
@@ -376,50 +415,68 @@
         });
 
         // Hand gesture drawing functionality
-        socket.on("hand_data", function(message) {
+    socket.on("hand_data", function(message) {
             if (currentMode !== "hand") return;
 
-            const data = JSON.parse(message);
-            if (data.x === null || data.y === null) {
+        const data = JSON.parse(message);
+        if (data.x === null || data.y === null) {
                 pointer.style.display = "none";
                 if (drawing) {
-                    saveState();
+                    if (isShapeDetectionEnabled && shapePoints.length > 10) {
+                        detectAndDrawShape();
+                    } else {
+                        saveState();
+                    }
                 }
                 drawing = false;
                 points = [];
-                return;
-            }
+                shapePoints = [];
+            return;
+        }
 
-            const x = data.x * canvas.width;
-            const y = data.y * canvas.height;
-            const gesture = data.gesture;
+        const x = data.x * canvas.width;
+        const y = data.y * canvas.height;
+        const gesture = data.gesture;
 
             pointer.style.left = `${x - 7.5}px`;
             pointer.style.top = `${y - 7.5}px`;
-            pointer.style.display = "block";
+        pointer.style.display = "block";
 
-            if (gesture === "draw") {
+        if (gesture === "draw") {
                 if (!drawing) {
+                    lastSavedState = canvas.toDataURL();
                     points = [];
+                    if (isShapeDetectionEnabled) {
+                        shapePoints = [];
+                    }
                 }
-                drawing = true;
-                points.push({ x, y });
+            drawing = true;
+            points.push({ x, y });
+                if (isShapeDetectionEnabled) {
+                    shapePoints.push({ x, y });
+                }
                 if (points.length >= 3) {
-                    smoothDraw();
+            smoothDraw();
                 }
-            } else if (gesture === "erase") {
+        } else if (gesture === "erase") {
                 if (drawing) {
                     saveState();
                 }
-                drawing = false;
-                ctx.clearRect(x - 20, y - 20, 40, 40);
-                points = [];
+            drawing = false;
+            ctx.clearRect(x - 20, y - 20, 40, 40);
+            points = [];
+                shapePoints = [];
             } else {
                 if (drawing) {
-                    saveState();
+                    if (isShapeDetectionEnabled && shapePoints.length > 10) {
+                        detectAndDrawShape();
+        } else {
+                        saveState();
+                    }
                 }
-                drawing = false;
-                points = [];
+            drawing = false;
+            points = [];
+                shapePoints = [];
             }
         });
 
@@ -478,9 +535,9 @@
             ctx.stroke();
         }
 
-        socket.on("video_feed", function(image) {
-            videoFeed.src = "data:image/jpeg;base64," + image;
-        });
+    socket.on("video_feed", function(image) {
+        videoFeed.src = "data:image/jpeg;base64," + image;
+    });
 
         // Save drawing functionality
         saveDrawingButton.addEventListener("click", () => {
@@ -495,7 +552,7 @@
             if (savedDrawing) {
                 const img = new Image();
                 img.onload = () => {
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
                     ctx.drawImage(img, 0, 0);
                     saveState();
                 };
@@ -545,6 +602,374 @@
             brushTool.classList.remove("active");
             ctx.strokeStyle = "#ffffff";
         });
-    </script>
+
+        // Shape detection and drawing functions
+        function detectAndDrawShape() {
+            const shape = detectShape(shapePoints);
+            if (shape) {
+                // Restore canvas to state before rough drawing
+                const img = new Image();
+                img.onload = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Draw the detected shape
+                    ctx.beginPath();
+                    ctx.strokeStyle = currentColor;
+                    ctx.lineWidth = currentBrushSize;
+                    
+                    switch(shape.type) {
+                        case 'circle':
+                            drawCircle(shape.center, shape.radius);
+                            break;
+                        case 'rectangle':
+                            drawRectangle(shape.start, shape.end);
+                            break;
+                        case 'square':
+                            drawSquare(shape.start, shape.end);
+                            break;
+                        case 'triangle':
+                            drawTriangle(shape.points);
+                            break;
+                        case 'polygon':
+                            drawPolygon(shape.points);
+                            break;
+                        case 'line':
+                            drawLine(shape.start, shape.end);
+                            break;
+                    }
+                    
+                    ctx.stroke();
+                    saveState();
+                };
+                img.src = lastSavedState;
+            } else {
+                saveState();
+            }
+        }
+
+        
+        function detectShape(points) {
+            if (points.length < 10) return null;
+
+            // Simplify points using RDP algorithm with higher tolerance
+            const simplifiedPoints = simplify(points, 5, true);
+            
+            // Calculate basic shape properties
+            const bounds = calculateBounds(simplifiedPoints);
+            const center = {
+                x: (bounds.minX + bounds.maxX) / 2,
+                y: (bounds.minY + bounds.maxY) / 2
+            };
+
+            // Check for closed shapes first
+            const isClosed = isShapeClosed(simplifiedPoints);
+            
+            if (isClosed) {
+                // Check for circle
+                const circle = detectCircle(simplifiedPoints, center);
+                if (circle) return circle;
+
+                // Check for rectangle/square
+                const rect = detectRectangle(simplifiedPoints, bounds);
+                if (rect) return rect;
+
+                // Check for triangle
+                const triangle = detectTriangle(simplifiedPoints);
+                if (triangle) return triangle;
+
+                // Check for polygon
+                const polygon = detectPolygon(simplifiedPoints);
+                if (polygon) return polygon;
+            }
+
+            // If not a closed shape, check for line
+            const line = detectLine(simplifiedPoints);
+            if (line) return line;
+
+            return null;
+        }
+
+        function calculateBounds(points) {
+            return {
+                minX: Math.min(...points.map(p => p.x)),
+                maxX: Math.max(...points.map(p => p.x)),
+                minY: Math.min(...points.map(p => p.y)),
+                maxY: Math.max(...points.map(p => p.y))
+            };
+        }
+
+        function isShapeClosed(points) {
+            const start = points[0];
+            const end = points[points.length - 1];
+            const distance = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
+            return distance < 30; // Threshold for considering shape closed
+        }
+
+        function detectCircle(points, center) {
+            // Calculate distances from center
+            const distances = points.map(p => 
+                Math.sqrt(Math.pow(p.x - center.x, 2) + Math.pow(p.y - center.y, 2))
+            );
+            
+            const avgDistance = distances.reduce((a, b) => a + b) / distances.length;
+            
+            // Calculate variance
+            const variance = distances.reduce((a, b) => 
+                a + Math.pow(b - avgDistance, 2)
+            ) / distances.length;
+            
+            // If variance is low and shape is roughly circular
+            if (variance < 500 && isShapeCircular(points, center, avgDistance)) {
+                return { 
+                    type: 'circle', 
+                    center, 
+                    radius: avgDistance 
+                };
+            }
+            return null;
+        }
+
+        function isShapeCircular(points, center, radius) {
+            // Check if points are roughly equidistant from center
+            const angleStep = Math.PI / 8; // Check 8 points around the circle
+            let matchedPoints = 0;
+            
+            for (let angle = 0; angle < Math.PI * 2; angle += angleStep) {
+                const x = center.x + radius * Math.cos(angle);
+                const y = center.y + radius * Math.sin(angle);
+                
+                // Check if there's a point near this position
+                const hasPoint = points.some(p => 
+                    Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2)) < 20
+                );
+                
+                if (hasPoint) matchedPoints++;
+            }
+            
+            return matchedPoints >= 6; // At least 6 points should match
+        }
+
+        function detectRectangle(points, bounds) {
+            const width = bounds.maxX - bounds.minX;
+            const height = bounds.maxY - bounds.minY;
+            
+            // Find corners using angle detection
+            const corners = [];
+            for (let i = 1; i < points.length - 1; i++) {
+                const angle = calculateAngle(
+                    points[i - 1],
+                    points[i],
+                    points[i + 1]
+                );
+                if (angle < Math.PI * 0.7) { // 126 degrees
+                    corners.push(points[i]);
+                }
+            }
+            
+            // Check if we have approximately 4 corners
+            if (corners.length >= 3 && corners.length <= 5) {
+                // Check if width and height are similar for square
+                if (Math.abs(width - height) < Math.max(width, height) * 0.2) {
+                    return { 
+                        type: 'square', 
+                        start: { x: bounds.minX, y: bounds.minY }, 
+                        end: { x: bounds.maxX, y: bounds.maxY } 
+                    };
+                }
+                return { 
+                    type: 'rectangle', 
+                    start: { x: bounds.minX, y: bounds.minY }, 
+                    end: { x: bounds.maxX, y: bounds.maxY } 
+                };
+            }
+            return null;
+        }
+
+        function detectTriangle(points) {
+            // Use RDP to find significant points
+            const simplified = simplify(points, 5, true);
+            
+            if (simplified.length >= 3) {
+                // Find three main points that form a triangle
+                const angles = [];
+                for (let i = 1; i < simplified.length - 1; i++) {
+                    const angle = calculateAngle(
+                        simplified[i - 1],
+                        simplified[i],
+                        simplified[i + 1]
+                    );
+                    angles.push(angle);
+                }
+                
+                const sharpAngles = angles.filter(a => a < Math.PI * 0.7); // 126 degrees
+                if (sharpAngles.length >= 2) {
+                    // Find the three most significant points
+                    const significantPoints = findSignificantPoints(simplified);
+                    if (significantPoints.length === 3) {
+                        return { type: 'triangle', points: significantPoints };
+                    }
+                }
+            }
+            return null;
+        }
+
+        function detectPolygon(points) {
+            // Use RDP to find significant points
+            const tolerance = 5; // Adjust this value to control simplification
+            const simplified = simplify(points, tolerance, true);
+            
+            if (simplified.length >= 4) {
+                // Find corners using angle detection
+                const corners = [];
+                for (let i = 1; i < simplified.length - 1; i++) {
+                    const angle = calculateAngle(
+                        simplified[i - 1],
+                        simplified[i],
+                        simplified[i + 1]
+                    );
+                    if (angle < Math.PI * 0.7) { // 126 degrees
+                        corners.push(simplified[i]);
+                    }
+                }
+                
+                if (corners.length >= 4) {
+                    return { type: 'polygon', points: corners };
+                }
+            }
+            return null;
+        }
+
+        function detectLine(points) {
+            if (points.length < 2) return null;
+            
+            // Use first and last points as line endpoints
+            const start = points[0];
+            const end = points[points.length - 1];
+            
+            // Calculate line equation: ax + by + c = 0
+            const a = end.y - start.y;
+            const b = start.x - end.x;
+            const c = end.x * start.y - start.x * end.y;
+            
+            // Calculate maximum distance of any point from the line
+            let maxDistance = 0;
+            for (const point of points) {
+                const distance = Math.abs(a * point.x + b * point.y + c) / 
+                               Math.sqrt(a * a + b * b);
+                maxDistance = Math.max(maxDistance, distance);
+            }
+            
+            // If all points are close to the line, it's a line
+            if (maxDistance < 20) {
+                return { type: 'line', start, end };
+            }
+            
+            return null;
+        }
+
+        function findSignificantPoints(points) {
+            if (points.length <= 3) return points;
+            
+            // Find the point with maximum distance from the line between first and last points
+            let maxDistance = 0;
+            let maxIndex = -1;
+            
+            const start = points[0];
+            const end = points[points.length - 1];
+            
+            for (let i = 1; i < points.length - 1; i++) {
+                const distance = pointToLineDistance(points[i], start, end);
+                if (distance > maxDistance) {
+                    maxDistance = distance;
+                    maxIndex = i;
+                }
+            }
+            
+            if (maxDistance > 10) { // Minimum distance threshold
+                const left = points.slice(0, maxIndex + 1);
+                const right = points.slice(maxIndex);
+                
+                return [
+                    start,
+                    points[maxIndex],
+                    end
+                ];
+            }
+            
+            return [start, end];
+        }
+
+        function pointToLineDistance(point, lineStart, lineEnd) {
+            const numerator = Math.abs(
+                (lineEnd.y - lineStart.y) * point.x -
+                (lineEnd.x - lineStart.x) * point.y +
+                lineEnd.x * lineStart.y -
+                lineEnd.y * lineStart.x
+            );
+            
+            const denominator = Math.sqrt(
+                Math.pow(lineEnd.y - lineStart.y, 2) +
+                Math.pow(lineEnd.x - lineStart.x, 2)
+            );
+            
+            return numerator / denominator;
+        }
+
+        function calculateAngle(p1, p2, p3) {
+            const v1 = { x: p1.x - p2.x, y: p1.y - p2.y };
+            const v2 = { x: p3.x - p2.x, y: p3.y - p2.y };
+            
+            const dot = v1.x * v2.x + v1.y * v2.y;
+            const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+            const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+            
+            return Math.acos(dot / (mag1 * mag2));
+        }
+
+        function drawEllipse(center, radiusX, radiusY, rotation) {
+            ctx.save();
+            ctx.translate(center.x, center.y);
+            ctx.rotate(rotation);
+            ctx.scale(radiusX, radiusY);
+            ctx.arc(0, 0, 1, 0, Math.PI * 2);
+            ctx.restore();
+        }
+
+        function drawSquare(start, end) {
+            const size = Math.max(end.x - start.x, end.y - start.y);
+            ctx.rect(start.x, start.y, size, size);
+        }
+
+        function drawPolygon(points) {
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+            ctx.closePath();
+        }
+
+        function drawCircle(center, radius) {
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
+        }
+
+        function drawRectangle(start, end) {
+            ctx.rect(start.x, start.y, end.x - start.x, end.y - start.y);
+        }
+
+        function drawTriangle(points) {
+            ctx.moveTo(points[0].x, points[0].y);
+            ctx.lineTo(points[1].x, points[1].y);
+            ctx.lineTo(points[2].x, points[2].y);
+            ctx.closePath();
+        }
+
+        function drawLine(start, end) {
+            // Ensure consistent line drawing
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(end.x, end.y);
+        }
+</script>
 </body>
 </html>
