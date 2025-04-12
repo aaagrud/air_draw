@@ -107,6 +107,14 @@
                     </label>
                     <span class="switch-label">Auto Shape Detection</span>
                 </div>
+                <div class="grid-mode-container">
+                    <label class="switch tooltip">
+                        <input type="checkbox" id="gridModeToggle">
+                        <span class="slider round"></span>
+                        <span class="tooltiptext">Grid Mode</span>
+                    </label>
+                    <span class="switch-label">Grid Mode</span>
+                </div>
             </div>
 
             <div class="toolbar-row">
@@ -162,7 +170,10 @@
         const eraserTool = document.getElementById("eraserTool");
         const colorPickerCircle = document.getElementById("colorPickerCircle");
         const shapeDetectionToggle = document.getElementById("shapeDetectionToggle");
+        const gridModeToggle = document.getElementById("gridModeToggle");
         let lastSavedState = null;
+        let isGridModeEnabled = false;
+        const gridSize = 20; // Size of grid cells in pixels
 
     let lastX = null, lastY = null;
     let drawing = false;
@@ -284,6 +295,17 @@
             isShapeDetectionEnabled = shapeDetectionToggle.checked;
         });
 
+        // Grid mode toggle functionality
+        gridModeToggle.addEventListener("change", () => {
+            isGridModeEnabled = gridModeToggle.checked;
+            if (isGridModeEnabled) {
+                drawGrid();
+            } else {
+                // Redraw canvas without grid
+                restoreState();
+            }
+        });
+
         // Mouse drawing functionality
         canvas.addEventListener("mousedown", (e) => {
             if (currentMode === "mouse") {
@@ -345,10 +367,27 @@
         function saveState() {
             // Remove any states after current index
             history = history.slice(0, historyIndex + 1);
-            // Add new state
-            history.push(canvas.toDataURL());
-            historyIndex++;
-            updateUndoRedoButtons();
+            
+            // If grid is enabled, temporarily disable it before saving
+            if (isGridModeEnabled) {
+                const currentState = canvas.toDataURL();
+                const img = new Image();
+                img.onload = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    history.push(canvas.toDataURL());
+                    historyIndex++;
+                    updateUndoRedoButtons();
+                    // Redraw grid
+                    drawGrid();
+                };
+                img.src = currentState;
+            } else {
+                // Add new state
+                history.push(canvas.toDataURL());
+                historyIndex++;
+                updateUndoRedoButtons();
+            }
         }
 
         function updateUndoRedoButtons() {
@@ -360,11 +399,10 @@
             if (historyIndex >= 0 && historyIndex < history.length) {
                 const img = new Image();
                 img.onload = () => {
-                    // Clear only the area that needs to be updated
-                    const lastState = history[historyIndex];
-                    if (lastState) {
-                        ctx.clearRect(0, 0, canvas.width, canvas.height);
-                        ctx.drawImage(img, 0, 0);
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    if (isGridModeEnabled) {
+                        drawGrid();
                     }
                 };
                 img.src = history[historyIndex];
@@ -640,6 +678,12 @@
                     }
                     
                     ctx.stroke();
+                    
+                    // Redraw grid if enabled
+                    if (isGridModeEnabled) {
+                        drawGrid();
+                    }
+                    
                     saveState();
                 };
                 img.src = lastSavedState;
@@ -970,6 +1014,59 @@
             ctx.moveTo(start.x, start.y);
             ctx.lineTo(end.x, end.y);
         }
+
+        let gridCanvas = document.createElement('canvas');
+        gridCanvas.width = canvas.width;
+        gridCanvas.height = canvas.height;
+        const gridCtx = gridCanvas.getContext('2d');
+        let isGridDrawn = false;
+
+        function drawGrid() {
+            if (!isGridDrawn) {
+                // Clear grid canvas
+                gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+                
+                // Draw grid on separate canvas
+                gridCtx.beginPath();
+                gridCtx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+                gridCtx.lineWidth = 1;
+
+                // Draw vertical lines
+                for (let x = 0; x <= gridCanvas.width; x += gridSize) {
+                    gridCtx.moveTo(x, 0);
+                    gridCtx.lineTo(x, gridCanvas.height);
+                }
+
+                // Draw horizontal lines
+                for (let y = 0; y <= gridCanvas.height; y += gridSize) {
+                    gridCtx.moveTo(0, y);
+                    gridCtx.lineTo(gridCanvas.width, y);
+                }
+
+                gridCtx.stroke();
+                isGridDrawn = true;
+            }
+            
+            // Draw grid canvas on main canvas
+            ctx.drawImage(gridCanvas, 0, 0);
+        }
+
+        // Update canvas size handling
+        function updateCanvasSize() {
+            // Update grid canvas size
+            gridCanvas.width = canvas.width;
+            gridCanvas.height = canvas.height;
+            isGridDrawn = false; // Reset grid drawn state
+            
+            // Redraw grid if enabled
+            if (isGridModeEnabled) {
+                drawGrid();
+            }
+        }
+
+        // Add resize observer for canvas
+        const resizeObserver = new ResizeObserver(updateCanvasSize);
+        resizeObserver.observe(canvas);
 </script>
 </body>
 </html>

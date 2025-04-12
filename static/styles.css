@@ -134,8 +134,9 @@ canvas:hover {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 15px;
+    gap: 20px;
     width: 100%;
+    flex-wrap: wrap;
 }
 
 .color-picker-container {
@@ -396,10 +397,12 @@ label {
     background: var(--glass-bg);
 }
 
-.shape-detection-container {
+.shape-detection-container,
+.grid-mode-container {
     display: flex;
     align-items: center;
     gap: 10px;
+    margin: 0 10px;
 }
 
 .switch {
