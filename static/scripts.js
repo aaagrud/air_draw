@@ -176,6 +176,12 @@ brushSizeSlider.addEventListener("input", (e) => {
     currentBrushSize = parseInt(e.target.value);
     brushSizeValue.textContent = currentBrushSize;
     ctx.lineWidth = currentBrushSize;
+    
+    if (currentTool === "eraser" && document.getElementById("eraserPreview")) {
+        const eraserPreview = document.getElementById("eraserPreview");
+        eraserPreview.style.width = `${currentBrushSize}px`;
+        eraserPreview.style.height = `${currentBrushSize}px`;
+    }
 });
 
 // Shape detection toggle functionality
@@ -203,6 +209,16 @@ canvas.addEventListener("mousedown", (e) => {
         lastX = e.clientX - rect.left;
         lastY = e.clientY - rect.top;
         points = [{ x: lastX, y: lastY }];
+        
+        if (isEraser) {
+            // Erase at the initial point
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.beginPath();
+            ctx.arc(lastX, lastY, currentBrushSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalCompositeOperation = 'source-over';
+        }
+        
         if (isShapeDetectionEnabled) {
             shapePoints = [{ x: lastX, y: lastY }];
         }
@@ -210,21 +226,43 @@ canvas.addEventListener("mousedown", (e) => {
 });
 
 canvas.addEventListener("mousemove", (e) => {
-    if (currentMode === "mouse" && drawing) {
+    if (currentMode === "mouse") {
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
-        points.push({ x, y });
-        if (isShapeDetectionEnabled) {
-            shapePoints.push({ x, y });
-        }
-        if (points.length >= 3) {
-            smoothDraw();
+        // Always update eraser preview if in eraser mode
+        if (currentTool === "eraser") {
+            updateEraserPreview(e);
         }
 
-        lastX = x;
-        lastY = y;
+        if (drawing) {
+            points.push({ x, y });
+            if (isShapeDetectionEnabled) {
+                shapePoints.push({ x, y });
+            }
+            
+            if (isEraser) {
+                // Use clearRect for eraser functionality
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.beginPath();
+                ctx.arc(x, y, currentBrushSize / 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalCompositeOperation = 'source-over';
+            } else if (points.length >= 3) {
+                smoothDraw();
+            }
+
+            lastX = x;
+            lastY = y;
+        }
+    }
+});
+
+// Update eraser preview position - Keep this separate for non-drawing mouse movement
+canvas.addEventListener("mousemove", (e) => {
+    if (currentMode === "mouse" && currentTool === "eraser" && !drawing) {
+        updateEraserPreview(e);
     }
 });
 
@@ -249,6 +287,11 @@ canvas.addEventListener("mouseout", () => {
     }
     drawing = false;
     points = [];
+    
+    // Hide eraser preview
+    if (document.getElementById("eraserPreview")) {
+        document.getElementById("eraserPreview").style.display = "none";
+    }
 });
 
 // Undo/Redo functionality
@@ -517,6 +560,10 @@ pencilTool.addEventListener("click", () => {
     brushTool.classList.remove("active");
     eraserTool.classList.remove("active");
     ctx.strokeStyle = currentColor;
+    
+    if (document.getElementById("eraserPreview")) {
+        document.getElementById("eraserPreview").style.display = "none";
+    }
 });
 
 brushTool.addEventListener("click", () => {
@@ -526,6 +573,10 @@ brushTool.addEventListener("click", () => {
     pencilTool.classList.remove("active");
     eraserTool.classList.remove("active");
     ctx.strokeStyle = currentColor;
+    
+    if (document.getElementById("eraserPreview")) {
+        document.getElementById("eraserPreview").style.display = "none";
+    }
 });
 
 eraserTool.addEventListener("click", () => {
@@ -1023,4 +1074,35 @@ function simplifyRDP(points, epsilon, highestQuality) {
             return dx * dx + dy * dy;
         }
     }
+}
+
+// Add eraser preview on canvas hover
+canvas.addEventListener("mouseover", (e) => {
+    if (currentMode === "mouse" && currentTool === "eraser") {
+        updateEraserPreview(e);
+    }
+});
+
+// Function to update eraser preview
+function updateEraserPreview(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    let eraserPreview = document.getElementById("eraserPreview");
+    if (!eraserPreview) {
+        eraserPreview = document.createElement("div");
+        eraserPreview.id = "eraserPreview";
+        eraserPreview.style.position = "absolute";
+        eraserPreview.style.border = "2px solid #000";
+        eraserPreview.style.borderRadius = "50%";
+        eraserPreview.style.pointerEvents = "none";
+        canvasContainer.appendChild(eraserPreview);
+    }
+    
+    eraserPreview.style.width = `${currentBrushSize}px`;
+    eraserPreview.style.height = `${currentBrushSize}px`;
+    eraserPreview.style.left = `${x - currentBrushSize / 2}px`;
+    eraserPreview.style.top = `${y - currentBrushSize / 2}px`;
+    eraserPreview.style.display = currentTool === "eraser" ? "block" : "none";
 }
