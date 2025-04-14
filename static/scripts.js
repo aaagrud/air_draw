@@ -79,14 +79,15 @@ colorPresets.forEach(preset => {
         colorPicker.value = color;
         colorPickerCircle.style.setProperty("--current-color", color);
         
-        // Reset eraser if active
+        // Reset eraser if active and re-enable shape detection
         if (currentTool === "eraser") {
             eraserTool.classList.remove("active");
             pencilTool.classList.add("active");
             currentTool = "pencil";
+            isEraser = false;
+            shapeDetectionToggle.disabled = false;
         }
         
-        isEraser = false;
         ctx.strokeStyle = currentColor;
     });
 });
@@ -164,10 +165,12 @@ colorPicker.addEventListener("input", (e) => {
     currentColor = e.target.value;
     colorPickerCircle.style.setProperty("--current-color", currentColor);
     isEraser = false;
+    
     if (currentTool === "eraser") {
         eraserTool.classList.remove("active");
         pencilTool.classList.add("active");
         currentTool = "pencil";
+        shapeDetectionToggle.disabled = false;
     }
 });
 
@@ -187,6 +190,13 @@ brushSizeSlider.addEventListener("input", (e) => {
 // Shape detection toggle functionality
 shapeDetectionToggle.addEventListener("change", () => {
     isShapeDetectionEnabled = shapeDetectionToggle.checked;
+    
+    // If activating shape detection while eraser is active, prevent it
+    if (isShapeDetectionEnabled && currentTool === "eraser") {
+        shapeDetectionToggle.checked = false;
+        isShapeDetectionEnabled = false;
+        alert("Shape detection cannot be used with the eraser tool. Please select a drawing tool first.");
+    }
 });
 
 // Grid mode toggle functionality
@@ -561,6 +571,9 @@ pencilTool.addEventListener("click", () => {
     eraserTool.classList.remove("active");
     ctx.strokeStyle = currentColor;
     
+    // Re-enable shape detection toggle if it was disabled by eraser
+    shapeDetectionToggle.disabled = false;
+    
     if (document.getElementById("eraserPreview")) {
         document.getElementById("eraserPreview").style.display = "none";
     }
@@ -574,6 +587,9 @@ brushTool.addEventListener("click", () => {
     eraserTool.classList.remove("active");
     ctx.strokeStyle = currentColor;
     
+    // Re-enable shape detection toggle if it was disabled by eraser
+    shapeDetectionToggle.disabled = false;
+    
     if (document.getElementById("eraserPreview")) {
         document.getElementById("eraserPreview").style.display = "none";
     }
@@ -586,6 +602,13 @@ eraserTool.addEventListener("click", () => {
     pencilTool.classList.remove("active");
     brushTool.classList.remove("active");
     ctx.strokeStyle = "#ffffff";
+    
+    // Disable shape detection when eraser is active
+    if (isShapeDetectionEnabled) {
+        shapeDetectionToggle.checked = false;
+        isShapeDetectionEnabled = false;
+    }
+    shapeDetectionToggle.disabled = true;
 });
 
 // Shape detection and drawing functions

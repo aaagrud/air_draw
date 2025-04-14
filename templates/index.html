@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Drawing App</title>
+    <title>Air Draw</title>
     <link rel="stylesheet" href="../static/styles.css">
     <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
     <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/simplify-js@1.2.4/simplify.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Montserrat:wght@700;800&family=Poppins:wght@700;800&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container fade-in">
@@ -16,143 +16,141 @@
             <h1>Air Draw</h1>
         </header>
         
-        <main>
-            <div class="app-layout">
-                <div class="left-panel">
-                    <div class="toolbar">
-                        <div class="toolbar-section">
-                            <h3>Drawing Tools</h3>
-                            <div class="drawing-tools">
-                                <button id="pencilTool" class="tool-button pencil active tooltip">
-                                    <span class="icon">✏️</span>
-                                    <span class="tooltiptext">Pencil</span>
-                                </button>
-                                <button id="brushTool" class="tool-button brush tooltip">
-                                    <span class="icon">🖌️</span>
-                                    <span class="tooltiptext">Brush</span>
-                                </button>
-                                <button id="eraserTool" class="tool-button eraser tooltip">
-                                    <span class="icon">🧹</span>
-                                    <span class="tooltiptext">Eraser</span>
-                                </button>
+        <main class="app-layout">
+            <div class="left-panel">
+                <div class="toolbar">
+                    <div class="toolbar-section">
+                        <h3>Drawing Tools</h3>
+                        <div class="drawing-tools">
+                            <button id="pencilTool" class="tool-button pencil active tooltip">
+                                <span class="icon">✏️</span>
+                                <span class="tooltiptext">Pencil</span>
+                            </button>
+                            <button id="brushTool" class="tool-button brush tooltip">
+                                <span class="icon">🖌️</span>
+                                <span class="tooltiptext">Brush</span>
+                            </button>
+                            <button id="eraserTool" class="tool-button eraser tooltip">
+                                <span class="icon">🧹</span>
+                                <span class="tooltiptext">Eraser</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="toolbar-section">
+                        <h3>Color & Size</h3>
+                        <div class="color-picker-container">
+                            <div class="color-picker" id="colorPickerCircle">
+                                <input type="color" id="colorPicker" value="#000000">
+                            </div>
+                            <div class="preset-colors">
+                                <div class="color-preset" data-color="#FF5252"></div>
+                                <div class="color-preset" data-color="#FF9800"></div>
+                                <div class="color-preset" data-color="#FFEB3B"></div>
+                                <div class="color-preset" data-color="#4CAF50"></div>
+                                <div class="color-preset" data-color="#2196F3"></div>
+                                <div class="color-preset" data-color="#9C27B0"></div>
                             </div>
                         </div>
-
-                        <div class="toolbar-section">
-                            <h3>Color & Size</h3>
-                            <div class="color-picker-container">
-                                <div class="color-picker" id="colorPickerCircle">
-                                    <input type="color" id="colorPicker" value="#000000">
-                                </div>
-                                <div class="preset-colors">
-                                    <div class="color-preset" data-color="#FF5252"></div>
-                                    <div class="color-preset" data-color="#FF9800"></div>
-                                    <div class="color-preset" data-color="#FFEB3B"></div>
-                                    <div class="color-preset" data-color="#4CAF50"></div>
-                                    <div class="color-preset" data-color="#2196F3"></div>
-                                    <div class="color-preset" data-color="#9C27B0"></div>
-                                </div>
-                            </div>
-                            <div class="brush-size-container">
-                                <label for="brushSizeSlider">Size: <span id="brushSizeValue">5</span>px</label>
-                                <input type="range" min="1" max="50" value="5" class="brush-size-slider" id="brushSizeSlider">
-                            </div>
+                        <div class="brush-size-container">
+                            <label for="brushSizeSlider">Size: <span id="brushSizeValue">5</span>px</label>
+                            <input type="range" min="1" max="50" value="5" class="brush-size-slider" id="brushSizeSlider">
                         </div>
+                    </div>
 
-                        <div class="toolbar-section">
-                            <h3>Settings</h3>
-                            <div class="settings-options">
-                                <div class="shape-detection-container">
-                                    <label class="switch tooltip">
-                                        <input type="checkbox" id="shapeDetectionToggle">
-                                        <span class="slider round"></span>
-                                        <span class="tooltiptext">Auto Shape Detection</span>
-                                    </label>
-                                    <span class="switch-label">Auto Shape</span>
-                                </div>
-                                <div class="grid-mode-container">
-                                    <label class="switch tooltip">
-                                        <input type="checkbox" id="gridModeToggle">
-                                        <span class="slider round"></span>
-                                        <span class="tooltiptext">Grid Mode</span>
-                                    </label>
-                                    <span class="switch-label">Grid Mode</span>
-                                </div>
+                    <div class="toolbar-section">
+                        <h3>Settings</h3>
+                        <div class="settings-options">
+                            <div class="shape-detection-container">
+                                <label class="switch tooltip">
+                                    <input type="checkbox" id="shapeDetectionToggle">
+                                    <span class="slider round"></span>
+                                    <span class="tooltiptext">Auto Shape Detection</span>
+                                </label>
+                                <span class="switch-label">Auto Shape</span>
                             </div>
-                        </div>
-
-                        <div class="toolbar-section">
-                            <h3>Actions</h3>
-                            <div class="action-buttons">
-                                <button id="undoButton" class="undo-button tooltip">
-                                    <span class="icon">↩️</span>
-                                    <span class="tooltiptext">Undo last action (Ctrl+Z)</span>
-                                </button>
-                                <button id="redoButton" class="redo-button tooltip">
-                                    <span class="icon">↪️</span>
-                                    <span class="tooltiptext">Redo last action (Ctrl+Y)</span>
-                                </button>
-                                <button id="clearButton" class="clear-button tooltip">
-                                    <span class="icon">🗑️</span>
-                                    <span class="tooltiptext">Clear all drawings</span>
-                                </button>
-                                <button id="downloadButton" class="download-button tooltip">
-                                    <span class="icon">⬇️</span>
-                                    <span class="tooltiptext">Download drawing as PNG</span>
-                                </button>
+                            <div class="grid-mode-container">
+                                <label class="switch tooltip">
+                                    <input type="checkbox" id="gridModeToggle">
+                                    <span class="slider round"></span>
+                                    <span class="tooltiptext">Grid Mode</span>
+                                </label>
+                                <span class="switch-label">Grid Mode</span>
                             </div>
                         </div>
                     </div>
 
-                    <div class="video-container">
-                        <img id="videoFeed" />
-                        <div class="gesture-info">
-                            <h3>Gesture Guide</h3>
-                            <ul>
-                                <li>☝️ Pointing: Draw</li>
-                                <li>🖐️ Open Palm: Erase</li>
-                                <li>✊ Fist: Stop Drawing</li>
-                            </ul>
+                    <div class="toolbar-section">
+                        <h3>Actions</h3>
+                        <div class="action-buttons">
+                            <button id="undoButton" class="undo-button tooltip">
+                                <span class="icon">↩️</span>
+                                <span class="tooltiptext">Undo (Ctrl+Z)</span>
+                            </button>
+                            <button id="redoButton" class="redo-button tooltip">
+                                <span class="icon">↪️</span>
+                                <span class="tooltiptext">Redo (Ctrl+Y)</span>
+                            </button>
+                            <button id="clearButton" class="clear-button tooltip">
+                                <span class="icon">🗑️</span>
+                                <span class="tooltiptext">Clear all</span>
+                            </button>
+                            <button id="downloadButton" class="download-button tooltip">
+                                <span class="icon">⬇️</span>
+                                <span class="tooltiptext">Download</span>
+                            </button>
                         </div>
-                        <button id="modeToggle" class="active">
-                            <span class="icon">✋</span>
-                            Hand Gesture Mode
-                        </button>
                     </div>
                 </div>
 
-                <div class="right-panel">
-                    <div class="canvas-wrapper">
-                        <div id="canvasContainer" style="position: relative;">
-                            <canvas id="drawingCanvas" width="800" height="500"></canvas>
-                            <div id="pointer"></div>
-                        </div>
+                <div class="video-container">
+                    <img id="videoFeed" />
+                    <div class="gesture-info">
+                        <h3>Gesture Guide</h3>
+                        <ul>
+                            <li>☝️ Pointing: Draw</li>
+                            <li>🖐️ Open Palm: Erase</li>
+                            <li>✊ Fist: Stop</li>
+                        </ul>
                     </div>
+                    <button id="modeToggle" class="active">
+                        <span class="icon">✋</span>
+                        Hand Gesture Mode
+                    </button>
+                </div>
+            </div>
 
-                    <div class="text-recognition-container">
-                        <div class="text-recognition-header">
-                            <h3>Recognized Text</h3>
-                            <div class="text-actions">
-                                <button id="recognizeText" class="tooltip">
-                                    <span class="icon">🔍</span>
-                                    <span class="tooltiptext">Convert drawing to text</span>
-                                </button>
-                                <button id="copyText" class="tooltip">
-                                    <span class="icon">📋</span>
-                                    <span class="tooltiptext">Copy recognized text</span>
-                                </button>
-                                <button id="clearText" class="tooltip">
-                                    <span class="icon">🗑️</span>
-                                    <span class="tooltiptext">Clear recognized text</span>
-                                </button>
-                                <button id="saveDrawing" class="tooltip">
-                                    <span class="icon">💾</span>
-                                    <span class="tooltiptext">Save current drawing</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div id="recognizedText" class="recognized-text" contenteditable="true"></div>
+            <div class="right-panel">
+                <div class="canvas-wrapper">
+                    <div id="canvasContainer">
+                        <canvas id="drawingCanvas" width="800" height="500"></canvas>
+                        <div id="pointer"></div>
                     </div>
+                </div>
+
+                <div class="text-recognition-container">
+                    <div class="text-recognition-header">
+                        <h3>Recognized Text</h3>
+                        <div class="text-actions">
+                            <button id="recognizeText" class="tooltip">
+                                <span class="icon">🔍</span>
+                                <span class="tooltiptext">Convert to text</span>
+                            </button>
+                            <button id="copyText" class="tooltip">
+                                <span class="icon">📋</span>
+                                <span class="tooltiptext">Copy text</span>
+                            </button>
+                            <button id="clearText" class="tooltip">
+                                <span class="icon">🗑️</span>
+                                <span class="tooltiptext">Clear text</span>
+                            </button>
+                            <button id="saveDrawing" class="tooltip">
+                                <span class="icon">💾</span>
+                                <span class="tooltiptext">Save drawing</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="recognizedText" class="recognized-text" contenteditable="true"></div>
                 </div>
             </div>
         </main>
