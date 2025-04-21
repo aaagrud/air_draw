@@ -1,17 +1,17 @@
 :root {
-    --primary-color: #5d5fef;
+    --primary-color: #8081b0;
     --secondary-color: #f9fafb;
-    --accent-color: #ff6b6b;
+    --accent-color: #1A2C40;
     --text-color: #2d3748;
     --heading-color: #2E3A59;
-    --subheading-color: #DB7B7B;
-    --background-color: #F5F7FA;
+    --subheading-color: #1A2C40;
+    --background-color: #ffffffff;
     --border-radius: 8px;
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     --shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
     --glass-bg: rgba(255, 255, 255, 0.85);
     --glass-border: 1px solid rgba(255, 255, 255, 0.5);
-    --panel-bg: rgba(255, 255, 255, 0.95);
+    --panel-bg: rgba(155, 171, 155, 0.39);
     
     /* Modern color palette */
     --red: #ff6b6b;
