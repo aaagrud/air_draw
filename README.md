@@ -33,7 +33,6 @@ The project aims to provide an intuitive and accessible way to draw and interact
     *   Canvas API
     *   Socket.IO
     *   Tesseract.js
-    *   Google Fonts
     *   simplify-js
 *   **Backend Frameworks/Libraries:**
     *   Flask
@@ -46,13 +45,3 @@ The project aims to provide an intuitive and accessible way to draw and interact
     *   CSS variables
     *   Flexbox
     *   Ramer–Douglas–Peucker Algorithm (implementation for simplifying lines)
-
-## Getting Started
-
-1.  **Project Setup (Python):**
-    *   Use of Python virtual environments (e.g., `.myenv`, `venv`) is implied.
-    *   Install dependencies defined in `requirements.txt`.
-2.  **Project Setup (JavaScript):**
-    *   The JavaScript files are static and likely need to be served by a web server.
-3.  **Running the application (Web App):**
-    *   The `app.py` file likely handles the initial startup.
